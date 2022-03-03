@@ -1,23 +1,24 @@
 import { NS } from './NetScript';
-import { takeover } from './mouser/takeover';
-import { payload_files } from './mouser_loader';
-
-let visited = [];
+import { batching_strategy_simple, map_breached_nodes } from './lib/index';
 
 let ns: NS = null
 
 export async function main(_ns: NS) {
 	ns = _ns;
-	visited = [ns.getHostname()];
+	await map_breached_nodes(ns, async (node: string) => {
+		start_payload(node);
+	});
+}
 
-	let nodes = ns.scan();
-	while (true) {
-		let node = nodes.pop();
-		if (!node) break;
-		if (visited.includes(node)) continue;
-		nodes = nodes.concat(ns.scan(node));
+function start_payload(node: string) {
+	let max_ram = ns.getServerMaxRam(node);
 
-		await takeover(node, payload_files, ns);
-		visited.push(node);
+	if (ns.getServerMaxMoney(node) == 0) return;
+	let batching_strategy = batching_strategy_simple(max_ram, ns);
+	
+	ns.exec("/mouser_payload/weaken.js", node, batching_strategy.weaken_threads, node);
+	if (ns.getServerRequiredHackingLevel(node) <= ns.getHackingLevel()) {
+		ns.exec("/mouser_payload/hack.js", node, batching_strategy.hack_threads, node);
 	}
+	ns.exec("/mouser_payload/grow.js", node, batching_strategy.grow_threads, node);
 }
